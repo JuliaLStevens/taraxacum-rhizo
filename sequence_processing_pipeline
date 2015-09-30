@@ -88,7 +88,7 @@ merge_otu_tables.py -i final_otu_table_1_minus_contaminants.biom,final_otu_table
 
 biom summarize_table -i final_filtered_otu_table.biom -o summary_filtered_otu_table.txt
 
-single_rarefaction.py
+single_rarefaction.py -i final_filtered_otu_table.biom -o final_filtered_otu_table_even3025.biom -d 3025
 
 biom convert -i final_filtered_otu_table_even6834.biom -o fungal_otu_table.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "ConsensusLineage"
  
