@@ -1,0 +1,95 @@
+#######Call QIIME#######
+MacQiime
+
+#For a list of program configurations, will throw errors if something not set up correctly
+print_qiime_config.py
+
+#Navigate to working directoty
+cd /Users/juliastevens...
+
+#Using QIIME v1.9.0 multiple join paired ends
+#uses defaults from join_paired_ends.py can pass a parameter file is want to change parameters
+join_paired_ends.py:per_max_diff 5
+#fastq_directory is what directly downloads from BaseSpace
+multiple_join_paired_ends.py -i fastq_directory/ -o merged_fastq/ -p merge_parameters.txt 
+
+
+#Convert .fastq files to .fna files
+
+nano convert_fastq.sh
+
+#! /bin/bash
+#Shell script to automate fastq to fasta conversion
+
+for file in $(<sample_names.txt)
+do
+    convert_fastaqual_fastq.py -f merged_fastq_directory/${file}.fastq -c fastq_to_fastaqual -F -o converted_merged_reads
+
+done
+
+#Control+X, Y, enter will exit from nano while saving your modified program
+
+#exit nano and run program
+chmod +x convert_fastq.sh
+./convert_fastq.sh
+
+add_qiime_labels.py -i converted_merged_reads/ -m "your_map_file".txt -c InputFileName -n 1 -o combined_seqs.fna
+
+count_seqs.py -i combined_seqs.fna
+
+#For a summary of the sequences use Mothur commands within QIIME
+#Call mothur
+mothur
+#Summary stats of sequences
+summary.seqs(fasta=combined_seqs.fna)
+
+#Screen Sequences outside of the expected length of product ~ expected range for EMP 16S primers
+screen.seqs(fasta=current, minlength=285, maxlength=295, maxambig=0, maxhomop=8)
+
+pick_otus.py -i combined_seqs.good.fna -m uclust -o uclust_picked_otus/ -s 0.97
+
+mkdir uclust_rep_seqs/
+
+#Pick representative sequences [Make sure to check the name of you input file so that it matches the script below]
+pick_rep_set.py -i uclust_picked_otus/combined_seqs_otus.txt -f combined_seqs.good.fna -o uclust_rep_seqs/uclust_rep_seqs.fasta -l uclust_rep_seqs/uclust_rep_seqs.log
+
+count_seqs.py -i uclust_rep_seqs/uclust_rep_seqs.fasta
+
+##For 16S analyses:
+
+align_seqs.py -i uclust_rep_seqs/uclust_rep_seqs.fasta -o pynast_aligned/ -e 100
+
+filter_alignment.py -i seqs_rep_set_aligned.fasta -o filtered_alignment/ -r
+
+assign_taxonomy.py -i cdhit_rep_seqs/cdhit_rep_seqs.fasta -m rdp -c 0.8
+
+make_otu_table.py -i uclust_picked_otus/combined_seqs.good_otus.txt -o 4_week_bacteria_otu_table.biom -e pynast_aligned/uclust_rep_seqs_failures.fasta -t rdp_assigned_taxonomy/uclust_rep_seqs_tax_assignments.txt 
+
+filter_otus_from_otu_table.py -i otu_table1.biom -o filtered_otu_table1.biom -n 3
+
+##For 18S analyses:
+assign_taxonomy.py -i uclust_rep_seqs/uclust_rep_seqs.fasta -o rdp_assigned_taxonomy/ -m rdp -t Silva_RDP_taxa_mapping_Eukarya_only_genus.txt -r Silva_108_rep_set_Eukarya_only.fna --rdp_max_memory 2000
+
+make_otu_table.py -i uclust_picked_otus/combined_seqs.good_otus.txt -o otu_table1.biom -t rdp_assigned_taxonomy/uclust_rep_seqs_tax_assignments.txt
+
+filter_otus_from_otu_table.py -i otu_table1.biom -o filtered_otu_table.biom -n 3
+
+##Remove OTUs that are in negative control
+split_otu_table.py -i filtered_otu_table.biom -m "filepath to map".txt -f Run_Number -o split_otu_tables
+filter_samples_from_otu_table.py -i split_otu_tables/filtered_otu_table1__Run_Number_1__.biom -o otu_table_run1_blank.biom -m experiment_map.txt -s "Treatment:NA"
+filter_otus_from_otu_table.py -i otu_table_run1_blank.biom -o filtered_otu_table_run1_blank.biom -n 1
+biom convert -i filtered_otu_table_run1_blank.biom -o otus_to_remove1.txt --to-tsv --table-type="OTU table"
+filter_otus_from_otu_table.py -i split_otu_tables/filtered_otu_table1__Run_Number_1__.biom -o otu_table1_minus_cont.biom -e otus_to_remove1.txt 
+filter_samples_from_otu_table.py -i otu_table_1_minus_cont.biom -o final_otu1.biom -n 1
+
+##Above steps for each of the 3 bacterial runs and each of 2 18S runs
+
+merge_otu_tables.py -i final_otu_table_1_minus_contaminants.biom,final_otu_table_2_minus_contaminants.biom -o final_filtered_otu_table.biom
+
+biom summarize_table -i final_filtered_otu_table.biom -o summary_filtered_otu_table.txt
+
+single_rarefaction.py
+
+biom convert -i final_filtered_otu_table_even6834.biom -o fungal_otu_table.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "ConsensusLineage"
+ 
+biom convert -i final_filtered_otu_table_even3025.biom -o bacterial_otu_table.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "ConsensusLineage"
