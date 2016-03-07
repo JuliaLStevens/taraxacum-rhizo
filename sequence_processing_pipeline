@@ -7,11 +7,9 @@ print_qiime_config.py
 #Navigate to working directoty
 cd /Users/juliastevens...
 
-#Using QIIME v1.9.0 multiple join paired ends
-#uses defaults from join_paired_ends.py can pass a parameter file is want to change parameters
-join_paired_ends.py:per_max_diff 5
+#Using QIIME v1.9.1 multiple join paired ends
 #fastq_directory is what directly downloads from BaseSpace
-multiple_join_paired_ends.py -i fastq_directory/ -o merged_fastq/ -p merge_parameters.txt 
+multiple_join_paired_ends.py -i fastq_directory/ -o merged_fastq/
 
 
 #Convert .fastq files to .fna files
@@ -45,6 +43,10 @@ summary.seqs(fasta=combined_seqs.fna)
 
 #Screen Sequences outside of the expected length of product ~ expected range for EMP 16S primers
 screen.seqs(fasta=current, minlength=285, maxlength=295, maxambig=0, maxhomop=8)
+quit()
+
+#Chimera searching using the ucsearch closed reference algorithm against greengenes database
+vsearch --uchime_ref combined_seqs.good.fna --db 97_otus.fasta --nonchimeras combined_seqs.good.nonchimera_ref.fna
 
 pick_otus.py -i combined_seqs.good.fna -m uclust -o uclust_picked_otus/ -s 0.97
 
@@ -55,24 +57,18 @@ pick_rep_set.py -i uclust_picked_otus/combined_seqs_otus.txt -f combined_seqs.go
 
 count_seqs.py -i uclust_rep_seqs/uclust_rep_seqs.fasta
 
-##For 16S analyses:
-
 align_seqs.py -i uclust_rep_seqs/uclust_rep_seqs.fasta -o pynast_aligned/ -e 100
 
 filter_alignment.py -i seqs_rep_set_aligned.fasta -o filtered_alignment/ -r
 
-assign_taxonomy.py -i cdhit_rep_seqs/cdhit_rep_seqs.fasta -m rdp -c 0.8
+assign_taxonomy.py -i filtered_alignment/uclust_rep_seqs_aligned_pfiltered.fasta -m rdp -c 0.8
 
-make_otu_table.py -i uclust_picked_otus/combined_seqs.good_otus.txt -o 4_week_bacteria_otu_table.biom -e pynast_aligned/uclust_rep_seqs_failures.fasta -t rdp_assigned_taxonomy/uclust_rep_seqs_tax_assignments.txt 
+make_otu_table.py -i uclust_picked_otus/combined_seqs.good.nonchimera_ref_otus.txt -o bacteria_otu_table.biom -e pynast_aligned_seqs/uclust_rep_seqs_failures.fasta -t rdp_assigned_taxonomy/uclust_rep_seqs_aligned_pfiltered_tax_assignments.txt 
 
-filter_otus_from_otu_table.py -i otu_table1.biom -o filtered_otu_table1.biom -n 3
+filter_otus_from_otu_table.py -i bacteria_otu_table.biom -o filtered_otu_table1.biom -n 3
 
-##For 18S analyses:
-assign_taxonomy.py -i uclust_rep_seqs/uclust_rep_seqs.fasta -o rdp_assigned_taxonomy/ -m rdp -t Silva_RDP_taxa_mapping_Eukarya_only_genus.txt -r Silva_108_rep_set_Eukarya_only.fna --rdp_max_memory 2000
+filter_taxa_from_otu_table.py -i filtered_otu_table.biom -o filtered_otu_table_nounclassified.biom -n None,Unclassified
 
-make_otu_table.py -i uclust_picked_otus/combined_seqs.good_otus.txt -o otu_table1.biom -t rdp_assigned_taxonomy/uclust_rep_seqs_tax_assignments.txt
-
-filter_otus_from_otu_table.py -i otu_table1.biom -o filtered_otu_table.biom -n 3
 
 ##Remove OTUs that are in negative control
 split_otu_table.py -i filtered_otu_table.biom -m "filepath to map".txt -f Run_Number -o split_otu_tables
@@ -80,16 +76,14 @@ filter_samples_from_otu_table.py -i split_otu_tables/filtered_otu_table1__Run_Nu
 filter_otus_from_otu_table.py -i otu_table_run1_blank.biom -o filtered_otu_table_run1_blank.biom -n 1
 biom convert -i filtered_otu_table_run1_blank.biom -o otus_to_remove1.txt --to-tsv --table-type="OTU table"
 filter_otus_from_otu_table.py -i split_otu_tables/filtered_otu_table1__Run_Number_1__.biom -o otu_table1_minus_cont.biom -e otus_to_remove1.txt 
-filter_samples_from_otu_table.py -i otu_table_1_minus_cont.biom -o final_otu1.biom -n 1
+filter_samples_from_otu_table.py -i otu_table1_minus_cont.biom -o final_otu1.biom -n 1
 
-##Above steps for each of the 3 bacterial runs and each of 2 18S runs
+##Repeat above steps for each of the 3 bacterial runs
 
-merge_otu_tables.py -i final_otu_table_1_minus_contaminants.biom,final_otu_table_2_minus_contaminants.biom -o final_filtered_otu_table.biom
+merge_otu_tables.py -i final_otu1.biom,final_otu2.biom,final_otu3.biom -o filtered_otu_table_nounclassified_nocontam.biom
 
 biom summarize_table -i final_filtered_otu_table.biom -o summary_filtered_otu_table.txt
 
-single_rarefaction.py -i final_filtered_otu_table.biom -o final_filtered_otu_table_even3025.biom -d 3025
+core_diversity_analyses.py -i filtered_otu_table_nounclassified_nocontam.biom -m experiment_map.txt -o core_diversity_analyses -e 2580 --nonphylogenetic_diversity -c Time,Region,Treatment -a -O 12
 
-biom convert -i final_filtered_otu_table_even6834.biom -o fungal_otu_table.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "ConsensusLineage"
- 
-biom convert -i final_filtered_otu_table_even3025.biom -o bacterial_otu_table.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "ConsensusLineage"
+biom convert -i filtered_otu_table_nounclassified_nocontam.biom -o filtered_otu_table_nounclassified_nocontam.txt --to-tsv --table-type="OTU table" --header-key taxonomy --output-metadata-id "taxonomy"
